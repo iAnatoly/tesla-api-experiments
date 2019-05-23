@@ -2,7 +2,9 @@ from requests import post, get
 from requests.utils import default_headers
 from getpass import getpass
 from json import dumps  # https://docs.python.org/2/library/json.html
-    
+
+DEBUG = 0
+
 class Tesla:
     ## config
     client_id="81527cff06843c8634fdc09e8ac0abefb46ac849f38fe1e431c2ef2106796384"
@@ -19,7 +21,7 @@ class Tesla:
             'password': password,
             })
 
-        print('Received {} {} response.'.format(response.status_code, response.reason))
+        if (DEBUG): print('Received {} {} response.'.format(response.status_code, response.reason))
         if response.status_code > 299: 
             raise Exception('Invalid response')
 
@@ -39,7 +41,7 @@ class Tesla:
     
         response = get(self.root.format(method),headers=headers)
         json = response.json()
-        print(dumps(json, sort_keys=True, indent=4, separators=(',', ': ')))
+        if (DEBUG): print(dumps(json, sort_keys=True, indent=4, separators=(',', ': ')))
     
         return json
     
@@ -50,7 +52,7 @@ class Tesla:
     
         response = post(self.root.format(method),data=json_data,headers=headers)
         json = response.json()
-        print(dumps(json, sort_keys=True, indent=4, separators=(',', ': ')))
+        if (DEBUG): print(dumps(json, sort_keys=True, indent=4, separators=(',', ': ')))
     
         return json
 
@@ -74,5 +76,29 @@ def main():
     print('Working with vehicle_id={}'.format(vehicle_id))
 
     data = tesla.get_json('/vehicles/{}/data'.format(vehicle_id))
+
+    firmware_version = data['response']['vehicle_state']['car_version']
+    print('Firmware version: {}'.format(firmware_version))
+
+    charge = data['response']['charge_state']
+
+    battery_range = charge['battery_range']
+    battery_level = charge['battery_level']
+    
+    print('Range: {} Battery: {}% Theoretical max range: {}'.format(
+        battery_range, 
+        battery_level, 
+        battery_range*100//battery_level)
+        )
+    
+    wh_added = charge['charge_energy_added']
+    mi_added = charge['charge_miles_added_ideal']
+
+    print('Charge started at {}'.format(battery_range-mi_added))
+
+    rate = 0.24 # let us use supercharger rate as a baseline
+
+    print('Engergy added: {} ({} miles). That would be ${} at {} per wh'.format(wh_added, mi_added, wh_added*rate, rate))
+    
 
 main()
