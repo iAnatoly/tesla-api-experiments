@@ -11,12 +11,13 @@ class Config:
         parser = ArgumentParser(description='Send commands to tesla.')
         parser.add_argument('-c', '--set-charge-limit', dest='limit', type=int, default=0, help='Percentage of the battery to set the charge to')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False, help='Verbose mode (priont json responses)')
+        parser.add_argument('-r', '--revoke', dest='revoke', action='store_true', default=False, help='Revoke saved token and exit')
+        
         args = parser.parse_args()
         
         self.limit = args.limit
         self.debug = args.verbose
-
-        self.get_credentials()
+        self.revoke = args.revoke
 
     def get_credentials(self):
         self.login = input('Enter your tesla.com login: [default={}]: '.format(Config.default_email))
@@ -32,18 +33,44 @@ class Tesla:
     client_id="81527cff06843c8634fdc09e8ac0abefb46ac849f38fe1e431c2ef2106796384"
     client_secret="c7257eb71a564034f9419ee651c7d0e5f7aa6bfbd18bafb5c5c033b093bb2fa3"
     root = 'https://owner-api.teslamotors.com/api/1/{}'    
+    oauth_token = 'https://owner-api.teslamotors.com/oauth/token'
+    oauth_revoke = 'https://owner-api.teslamotors.com/oauth/revoke'
+
 
     def __init__(self, config: Config):
         ''' authenticate and save access token'''
-        self.token = None
         self.config = config
+        self.load_token()
+        
+        if not self.is_token_valid():
+            self.get_token()
+            self.save_token()
 
-        response = post('https://owner-api.teslamotors.com/oauth/token', data={
-            'client_id': self.client_id,
-            'client_secret': self.client_secret,
+
+    def __del__(self):
+        ''' revoke access token to avoid pollution'''
+        if self.token:
+            response = post(Tesla.oauth_revoke, data='token={}'.format(self.token))
+            print('Token {} revoked with status code {}.'.format(self.token[:5], response.status_code))
+
+    def is_token_valid(self):
+        return False
+
+    def load_token(self):
+        self.token = None 
+
+    def save_token(self):
+        pass
+
+    def get_token(self):
+        self.config.get_credentials()
+
+        response = post(Tesla.oauth_token, data = {
+            'client_id': Tesla.client_id,
+            'client_secret': Tesla.client_secret,
             'grant_type': 'password',
-            'email': config.login,
-            'password': config.password,
+            'email': self.config.login,
+            'password': self.config.password,
             })
 
         if (self.config.debug): print('Received {} {} response.'.format(response.status_code, response.reason))
@@ -56,13 +83,8 @@ class Tesla:
 
         payload = response.json()
         self.token = payload['access_token']
-        print('Received token: ...{}.'.format(self.token[:5]))
 
-    def __del__(self):
-        ''' revoke access token to avoid pollution'''
-        if self.token:
-            response = post('https://owner-api.teslamotors.com/oauth/revoke', data='token={}'.format(self.token))
-            print('Token {} revoked with status code {}.'.format(self.token[:5], response.status_code))
+        print('Received token: ...{}.'.format(self.token[:5]))
 
     def get_json(self,method: str):
         ''' execute an authenticated GET request against a given method'''
@@ -71,6 +93,7 @@ class Tesla:
     
         response = get(self.root.format(method),headers=headers)
         json = response.json()
+
         if (self.config.debug): print(dumps(json, sort_keys=True, indent=4, separators=(',', ': ')))
     
         return json
