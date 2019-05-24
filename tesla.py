@@ -1,8 +1,13 @@
 from requests import post, get
 from requests.utils import default_headers
 from getpass import getpass
-from json import dumps  # https://docs.python.org/2/library/json.html
+from json import dumps, dump, load  # https://docs.python.org/2/library/json.html
 from argparse import ArgumentParser # https://docs.python.org/3.3/library/argparse.html
+from os.path import expanduser
+
+# Tesla API reference:
+# * https://tesla-api.timdorr.com/
+# * https://www.teslaapi.io/vehicles/commands
 
 class Config:
     default_email = 'anatoly.ivanov@gmail.com'
@@ -11,7 +16,7 @@ class Config:
         parser = ArgumentParser(description='Send commands to tesla.')
         parser.add_argument('-c', '--set-charge-limit', dest='limit', type=int, default=0, help='Percentage of the battery to set the charge to')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False, help='Verbose mode (priont json responses)')
-        parser.add_argument('-r', '--revoke', dest='revoke', action='store_true', default=False, help='Revoke saved token and exit')
+        parser.add_argument('-r', '--revoke', dest='revoke', action='store_true', default=False, help='Revoke saved token (logout) and exit')
         
         args = parser.parse_args()
         
@@ -35,12 +40,17 @@ class Tesla:
     root = 'https://owner-api.teslamotors.com/api/1/{}'    
     oauth_token = 'https://owner-api.teslamotors.com/oauth/token'
     oauth_revoke = 'https://owner-api.teslamotors.com/oauth/revoke'
+    token_file = expanduser("~")+'/.tesla_token'
 
 
     def __init__(self, config: Config):
         ''' authenticate and save access token'''
         self.config = config
         self.load_token()
+
+        if config.revoke:
+            self.revoke_token()
+            exit(2)
         
         if not self.is_token_valid():
             self.get_token()
@@ -48,19 +58,28 @@ class Tesla:
 
 
     def __del__(self):
+        pass
+
+    def revoke_token(self):
         ''' revoke access token to avoid pollution'''
         if self.token:
             response = post(Tesla.oauth_revoke, data='token={}'.format(self.token))
             print('Token {} revoked with status code {}.'.format(self.token[:5], response.status_code))
 
     def is_token_valid(self):
-        return False
+        return self.token is not None
 
     def load_token(self):
-        self.token = None 
+        try:
+            with open(Tesla.token_file, 'r') as f:
+                token_json = load(f)
+                self.token = token_json['token']
+        except:
+            self.token = None 
 
     def save_token(self):
-        pass
+        with open(Tesla.token_file, 'w+') as f:
+            dump({ 'token': self.token }, f)
 
     def get_token(self):
         self.config.get_credentials()
@@ -92,6 +111,11 @@ class Tesla:
         headers.update({'Authorization': 'bearer {}'.format(self.token)}) 
     
         response = get(self.root.format(method),headers=headers)
+        if self.config.debug: print(response.status_code, response.reason)
+        
+        if response.status_code > 299: 
+            raise Exception('Invalid response')
+
         json = response.json()
 
         if (self.config.debug): print(dumps(json, sort_keys=True, indent=4, separators=(',', ': ')))
