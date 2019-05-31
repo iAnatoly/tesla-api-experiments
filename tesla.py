@@ -1,6 +1,7 @@
 from requests import post, get
 from requests.utils import default_headers
 from getpass import getpass
+from time import sleep
 from json import dumps, dump, load  # https://docs.python.org/2/library/json.html
 from argparse import ArgumentParser # https://docs.python.org/3.3/library/argparse.html
 from os.path import expanduser
@@ -8,6 +9,15 @@ from os.path import expanduser
 # Tesla API reference:
 # * https://tesla-api.timdorr.com/
 # * https://www.teslaapi.io/vehicles/commands
+
+class InvalidCredentialsException(Exception):
+    pass
+
+class VehicleAsleepException(Exception):
+    pass
+
+class UnexpectedResponseException (Exception):
+    pass
 
 class Config:
     default_email = 'anatoly.ivanov@gmail.com'
@@ -17,12 +27,14 @@ class Config:
         parser.add_argument('-c', '--set-charge-limit', dest='limit', type=int, default=0, help='Percentage of the battery to set the charge to')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False, help='Verbose mode (priont json responses)')
         parser.add_argument('-r', '--revoke', dest='revoke', action='store_true', default=False, help='Revoke saved token (logout) and exit')
+        parser.add_argument('-w', '--wakeuip', dest='wakeup', action='store_true', default=False, help='Wake up vehicle')
         
         args = parser.parse_args()
         
         self.limit = args.limit
         self.debug = args.verbose
         self.revoke = args.revoke
+        self.wakeup = args.wakeup
 
     def get_credentials(self):
         self.login = input('Enter your tesla.com login: [default={}]: '.format(Config.default_email))
@@ -93,12 +105,12 @@ class Tesla:
             })
 
         if (self.config.debug): print('Received {} {} response.'.format(response.status_code, response.reason))
+        
         if response.status_code == 401:
-            print("Invalid credentials, please try again")
-            exit(1)
+            raise InvalidCredentialsException()
      
         if response.status_code > 299: 
-            raise Exception('Invalid response')
+            raise Exception('Invalid response: {} {}'.format(response.status_code, response.reason))
 
         payload = response.json()
         self.token = payload['access_token']
@@ -113,8 +125,12 @@ class Tesla:
         response = get(self.root.format(method),headers=headers)
         if self.config.debug: print(response.status_code, response.reason)
         
+        if response.status_code == 408:
+            raise VehicleAsleepException()
+     
         if response.status_code > 299: 
-            raise Exception('Invalid response')
+            raise UnexpectedResponseException('Invalid response: {} {}'.format(response.status_code, response.reason))
+
 
         json = response.json()
 
@@ -122,7 +138,7 @@ class Tesla:
     
         return json
     
-    def post_json(self,method:str,json_data: dict):
+    def post_json(self,method:str,json_data: dict = None):
         ''' execute an authenticated POST request against a given method, post provided data'''
         headers = default_headers()
         headers.update({'Authorization': 'bearer {}'.format(self.token)}) 
@@ -130,8 +146,12 @@ class Tesla:
         response = post(self.root.format(method),data=json_data,headers=headers)
         json = response.json()
         if (self.config.debug): print(dumps(json, sort_keys=True, indent=4, separators=(',', ': ')))
+        
+        if response.status_code == 408:
+            raise VehicleAsleepException()
+     
         if response.status_code > 299: 
-            raise Exception('Invalid response')
+            raise Exception('Invalid response: {} {}'.format(response.status_code, response.reason))
 
         return json
 
@@ -167,15 +187,31 @@ def main():
     config = Config()
     tesla = Tesla(config)
 
-    vehicle_id = tesla.get_json('/vehicles')['response'][0]['id']    
-    print('Working with vehicle_id={}'.format(vehicle_id))
+    try:
+        vehicle_id = tesla.get_json('/vehicles')['response'][0]['id']    
+        print('Working with vehicle_id={}'.format(vehicle_id))
 
-    data = tesla.get_json('/vehicles/{}/data'.format(vehicle_id))
-    print_stats(data)
+        if config.wakeup:
+            awake = False
+            while not awake:
+                try:
+                    tesla.post_json('/vehicles/{}/command/wake_up'.format(vehicle_id))
+                    awake = True
+                except VehicleAsleepException:
+                    print("...waking...")
+                    sleep(10)
+                    
+        data = tesla.get_json('/vehicles/{}/data'.format(vehicle_id))
+        print_stats(data)
 
-    if config.limit>0:
-        print('Updating the limit: {}->{}'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
-        tesla.post_json('/vehicles/{}/command/set_charge_limit'.format(vehicle_id), json_data={ 'percent': config.limit })
-           
+        if config.limit>0:
+            print('Updating the limit: {}->{}'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
+            tesla.post_json('/vehicles/{}/command/set_charge_limit'.format(vehicle_id), json_data={ 'percent': config.limit })
+    except InvalidCredentialsException as ex:
+        print("Invalid credentials: {}".format(ex.message))
+    except VehicleAsleepException as ex:
+        print("Vehicle is asleep. Try walking it up with -w")
+    except UnexpectedResponseException as ex:
+        print("Unexpected response: {}".format(ex.message))           
 
 main()
