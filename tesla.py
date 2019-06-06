@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from requests import post, get
 from requests.utils import default_headers
 from getpass import getpass
