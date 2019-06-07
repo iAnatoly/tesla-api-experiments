@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from requests import post, get
+from requests.exceptions import ConnectionError
 from requests.utils import default_headers
 from getpass import getpass
 from time import sleep
@@ -29,6 +30,7 @@ class Config:
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False, help='Verbose mode (priont json responses)')
         parser.add_argument('-r', '--revoke', dest='revoke', action='store_true', default=False, help='Revoke saved token (logout) and exit')
         parser.add_argument('-w', '--wakeuip', dest='wakeup', action='store_true', default=False, help='Wake up vehicle')
+        parser.add_argument('-d', '--dont', dest='cancel_update', action='store_true', default=False, help='Cancel the software update')
         
         args = parser.parse_args()
         
@@ -36,6 +38,7 @@ class Config:
         self.debug = args.verbose
         self.revoke = args.revoke
         self.wakeup = args.wakeup
+        self.cancel_update = args.cancel_update
 
     def get_credentials(self):
         self.login = input('Enter your tesla.com login: [default={}]: '.format(Config.default_email))
@@ -208,11 +211,18 @@ def main():
         if config.limit>0:
             print('Updating the limit: {}->{}'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
             tesla.post_json('/vehicles/{}/command/set_charge_limit'.format(vehicle_id), json_data={ 'percent': config.limit })
+
+        if config.cancel_update:
+            print('Attempting to cancel the update')
+            tesla.post_json('/vehicles/{}/command/cancel_software_update'.format(vehicle_id), json_data={})
+            
     except InvalidCredentialsException as ex:
         print("Invalid credentials: {}".format(ex.message))
     except VehicleAsleepException as ex:
         print("Vehicle is asleep. Try walking it up with -w")
     except UnexpectedResponseException as ex:
         print("Unexpected response: {}".format(ex.message))           
+    except ConnectionError as err:
+        print("Connection error: {}".format(err))
 
 main()
