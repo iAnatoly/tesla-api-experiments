@@ -159,6 +159,9 @@ class Tesla:
         if response.status_code > 299: 
             raise Exception('Invalid response: {} {}'.format(response.status_code, response.reason))
 
+        if json:
+            print('Result: {}; reason: {}'.format(json['response']['result'], json['response']['reason']))
+
         return json
 
 def print_stats(data: dict, rate):
@@ -187,7 +190,7 @@ def print_stats(data: dict, rate):
     print('Charge started at {}'.format(battery_range-mi_added))
 
     charge_limit = charge['charge_limit_soc']
-    print('Charge limit: {}'.format(charge_limit))
+    print('Charge limit: {}%'.format(charge_limit))
 
 
     print('Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
@@ -215,7 +218,7 @@ def main():
         print_stats(data, config.rate)
 
         if config.limit>0:
-            print('Updating the limit: {}->{}'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
+            print('Updating the limit: {}%->{}%'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
             tesla.post_json('/vehicles/{}/command/set_charge_limit'.format(vehicle_id), json_data={ 'percent': config.limit })
 
         if config.cancel_update:
