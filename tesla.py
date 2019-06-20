@@ -39,6 +39,8 @@ class Config:
         self.revoke = args.revoke
         self.wakeup = args.wakeup
         self.cancel_update = args.cancel_update
+        self.rate = 0.13 # let us use PGE EV rate as baseline
+
 
     def get_credentials(self):
         self.login = input('Enter your tesla.com login: [default={}]: '.format(Config.default_email))
@@ -159,9 +161,14 @@ class Tesla:
 
         return json
 
-def print_stats(data: dict):
+def print_stats(data: dict, rate):
     firmware_version = data['response']['vehicle_state']['car_version']
     print('Firmware version: {}'.format(firmware_version))
+    
+    update = data['response']['vehicle_state']['software_update']
+    duration = update['expected_duration_sec']
+    status = update['status']
+    print('Expected duration: {} status: {}'.format(duration, status))
 
     charge = data['response']['charge_state']
 
@@ -182,7 +189,6 @@ def print_stats(data: dict):
     charge_limit = charge['charge_limit_soc']
     print('Charge limit: {}'.format(charge_limit))
 
-    rate = 0.24 # let us use supercharger rate as a baseline
 
     print('Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
             
@@ -206,7 +212,7 @@ def main():
                     sleep(10)
                     
         data = tesla.get_json('/vehicles/{}/data'.format(vehicle_id))
-        print_stats(data)
+        print_stats(data, config.rate)
 
         if config.limit>0:
             print('Updating the limit: {}->{}'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
