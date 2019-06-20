@@ -82,7 +82,7 @@ class Tesla:
         ''' revoke access token to avoid pollution'''
         if self.token:
             response = post(Tesla.oauth_revoke, data='token={}'.format(self.token))
-            print('Token {} revoked with status code {}.'.format(self.token[:5], response.status_code))
+            print('[!] Token {} revoked with status code {}.'.format(self.token[:5], response.status_code))
 
     def is_token_valid(self):
         return self.token is not None
@@ -121,7 +121,7 @@ class Tesla:
         payload = response.json()
         self.token = payload['access_token']
 
-        print('Received token: ...{}.'.format(self.token[:5]))
+        print('[!] Received token: ...{}.'.format(self.token[:5]))
 
     def get_json(self,method: str):
         ''' execute an authenticated GET request against a given method'''
@@ -160,25 +160,26 @@ class Tesla:
             raise Exception('Invalid response: {} {}'.format(response.status_code, response.reason))
 
         if json:
-            print('Result: {}; reason: {}'.format(json['response']['result'], json['response']['reason']))
+            print('[*] Result: {}; reason: {}'.format(json['response']['result'], json['response']['reason']))
 
         return json
 
 def print_stats(data: dict, rate):
     firmware_version = data['response']['vehicle_state']['car_version']
-    print('Firmware version: {}'.format(firmware_version))
+    print('    Current firmware version: {}'.format(firmware_version))
     
     update = data['response']['vehicle_state']['software_update']
     duration = update['expected_duration_sec']
     status = update['status']
-    print('Expected duration: {} status: {}'.format(duration, status))
+    if status:
+        print('[!] Software update: {}; Expected installation duration: {}'.format(status, duration))
 
     charge = data['response']['charge_state']
 
     battery_range = charge['battery_range']
     battery_level = charge['battery_level']
     
-    print('Range: {} Battery: {}% Theoretical max range: {}'.format(
+    print('    Range: {} Battery: {}% Theoretical max range: {}'.format(
         battery_range, 
         battery_level, 
         battery_range*100//battery_level)
@@ -187,7 +188,7 @@ def print_stats(data: dict, rate):
     charge_limit = charge['charge_limit_soc']
     charge_state = charge['charging_state']
 
-    print('Charge limit: {}%'.format(charge_limit))
+    print('    Charge limit: {}%'.format(charge_limit))
 
     if charge_state == 'Charging':
         charge_rate = charge['charge_rate']
@@ -201,8 +202,8 @@ def print_stats(data: dict, rate):
         # todo: charge_current_request and calc charge deficit
         # todo: compare voltage and calculate power loss in the conductor
     
-        print('Charge started at {} miles; current: {} Amp, voltage: {} Volts'.format(battery_range-mi_added, current, voltage))
-        print('Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
+        print('    Charge started at {} miles; current: {} Amp, voltage: {} Volts'.format(battery_range-mi_added, current, voltage))
+        print('    Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
             
         
 def main():
@@ -211,7 +212,7 @@ def main():
 
     try:
         vehicle_id = tesla.get_json('/vehicles')['response'][0]['id']    
-        print('Working with vehicle_id={}'.format(vehicle_id))
+        print('\n[*] Working with vehicle_id={}'.format(vehicle_id))
 
         if config.wakeup:
             awake = False
@@ -227,20 +228,20 @@ def main():
         print_stats(data, config.rate)
 
         if config.limit>0:
-            print('Updating the limit: {}%->{}%'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
+            print('    Updating the limit: {}%->{}%'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
             tesla.post_json('/vehicles/{}/command/set_charge_limit'.format(vehicle_id), json_data={ 'percent': config.limit })
 
         if config.cancel_update:
-            print('Attempting to cancel the update')
+            print('    Attempting to cancel the update')
             tesla.post_json('/vehicles/{}/command/cancel_software_update'.format(vehicle_id), json_data={})
             
     except InvalidCredentialsException as ex:
-        print("Invalid credentials: {}".format(ex.message))
+        print("[E] Invalid credentials: {}".format(ex.message))
     except VehicleAsleepException as ex:
-        print("Vehicle is asleep. Try walking it up with -w")
+        print("[!] Vehicle is asleep. Try walking it up with -w")
     except UnexpectedResponseException as ex:
-        print("Unexpected response: {}".format(ex.message))           
+        print("[E] Unexpected response: {}".format(ex.message))           
     except ConnectionError as err:
-        print("Connection error: {}".format(err))
+        print("[E] Connection error: {}".format(err))
 
 main()
