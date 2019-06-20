@@ -159,8 +159,9 @@ class Tesla:
         if response.status_code > 299: 
             raise Exception('Invalid response: {} {}'.format(response.status_code, response.reason))
 
-        if json:
-            print('[*] Result: {}; reason: {}'.format(json['response']['result'], json['response']['reason']))
+        if 'response' in json:
+            if 'result' in json['response']:
+                print('[*] Result: {}; reason: {}'.format(json['response']['result'], json['response']['reason']))
 
         return json
 
@@ -190,7 +191,7 @@ def print_stats(data: dict, rate):
 
     print('    Charge limit: {}%'.format(charge_limit))
 
-    if charge_state == 'Charging':
+    if charge_state == 'Charging' or charge_state == 'Complete':
         charge_rate = charge['charge_rate']
     
         wh_added = charge['charge_energy_added']
