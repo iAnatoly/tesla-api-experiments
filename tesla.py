@@ -217,10 +217,10 @@ def main():
             awake = False
             while not awake:
                 try:
-                    tesla.post_json('/vehicles/{}/command/wake_up'.format(vehicle_id))
+                    tesla.post_json('/vehicles/{}/wake_up'.format(vehicle_id))
                     awake = True
                 except VehicleAsleepException:
-                    print("...waking...")
+                    print("...waking up...")
                     sleep(10)
                     
         data = tesla.get_json('/vehicles/{}/data'.format(vehicle_id))
