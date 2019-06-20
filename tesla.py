@@ -183,17 +183,26 @@ def print_stats(data: dict, rate):
         battery_level, 
         battery_range*100//battery_level)
         )
-    
-    wh_added = charge['charge_energy_added']
-    mi_added = charge['charge_miles_added_ideal']
-    
-    print('Charge started at {}'.format(battery_range-mi_added))
-
+        
     charge_limit = charge['charge_limit_soc']
+    charge_state = charge['charging_state']
+
     print('Charge limit: {}%'.format(charge_limit))
 
+    if charge_state == 'Charging':
+        charge_rate = charge['charge_rate']
+    
+        wh_added = charge['charge_energy_added']
+        mi_added = charge['charge_miles_added_ideal']
 
-    print('Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
+        current = charge['charger_actual_current']
+        voltage = charge['charger_voltage']
+
+        # todo: charge_current_request and calc charge deficit
+        # todo: compare voltage and calculate power loss in the conductor
+    
+        print('Charge started at {} miles; current: {} Amp, voltage: {} Volts'.format(battery_range-mi_added, current, voltage))
+        print('Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
             
         
 def main():
