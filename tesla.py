@@ -137,7 +137,6 @@ class Tesla:
         if response.status_code > 299: 
             raise UnexpectedResponseException('Invalid response: {} {}'.format(response.status_code, response.reason))
 
-
         json = response.json()
 
         if (self.config.debug): print(dumps(json, sort_keys=True, indent=4, separators=(',', ': ')))
@@ -178,13 +177,16 @@ def print_stats(data: dict, rate):
     charge = data['response']['charge_state']
 
     battery_range = charge['battery_range']
+    est_range = charge['est_battery_range']
     battery_level = charge['battery_level']
     
-    print('    Range: {} Battery: {}% Theoretical max range: {}'.format(
+    print('    Battery:\n\tRange: \t\t\t{}\n\tEstimated range: \t{}\n\tBattery: \t\t{}%\n\tTheoretical max range: \t{}'.format(
         battery_range, 
+        est_range,
         battery_level, 
-        battery_range*100//battery_level)
+        battery_range*100//battery_level,
         )
+    )
         
     charge_limit = charge['charge_limit_soc']
     charge_state = charge['charging_state']
@@ -203,7 +205,7 @@ def print_stats(data: dict, rate):
         # todo: charge_current_request and calc charge deficit
         # todo: compare voltage and calculate power loss in the conductor
     
-        print('    Charge started at {} miles; current: {} Amp, voltage: {} Volts'.format(battery_range-mi_added, current, voltage))
+        print('    Charge started at {} miles; current: {} Amp, voltage: {} Volts at rate of {} mph'.format(battery_range-mi_added, current, voltage, charge_rate))
         print('    Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
             
         
@@ -237,11 +239,11 @@ def main():
             tesla.post_json('/vehicles/{}/command/cancel_software_update'.format(vehicle_id), json_data={})
             
     except InvalidCredentialsException as ex:
-        print("[E] Invalid credentials: {}".format(ex.message))
+        print("[E] Invalid credentials: {}".format(ex))
     except VehicleAsleepException as ex:
         print("[!] Vehicle is asleep. Try walking it up with -w")
     except UnexpectedResponseException as ex:
-        print("[E] Unexpected response: {}".format(ex.message))           
+        print("[E] Unexpected response: {}".format(ex))           
     except ConnectionError as err:
         print("[E] Connection error: {}".format(err))
 
