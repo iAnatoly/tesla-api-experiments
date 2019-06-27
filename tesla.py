@@ -245,10 +245,8 @@ class Tesla(TeslaBase):
         return self.data['response']['charge_state']['charge_limit_soc']
         
 def main():
-    config = Config()
-
     try:
-
+        config = Config()
         tesla = Tesla(config)
         print('\n[*] Working with vehicle_id={}\n'.format(tesla.vehicle_id))
 
@@ -262,7 +260,7 @@ def main():
                     print("...waking up...")
                     sleep(10)
                     
-        data = tesla.pull_data()
+        tesla.pull_data()
 
         tesla.print_stats()
 
