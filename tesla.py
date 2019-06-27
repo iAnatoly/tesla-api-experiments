@@ -51,7 +51,7 @@ class Config:
 
         self.password = getpass('Please eneter password for {}: '.format(self.login))
 
-class Tesla:
+class TeslaBase:
     ## API config
     client_id="81527cff06843c8634fdc09e8ac0abefb46ac849f38fe1e431c2ef2106796384"
     client_secret="c7257eb71a564034f9419ee651c7d0e5f7aa6bfbd18bafb5c5c033b093bb2fa3"
@@ -164,78 +164,103 @@ class Tesla:
 
         return json
 
-def print_stats(data: dict, rate):
-    firmware_version = data['response']['vehicle_state']['car_version']
-    print('    Current firmware version: {}'.format(firmware_version))
-    
-    update = data['response']['vehicle_state']['software_update']
-    duration = update['expected_duration_sec']
-    status = update['status']
-    if status:
-        print('[!] Software update: {}; Expected installation duration: {}'.format(status, duration))
+class Tesla(TeslaBase):
+    def __init__(self,config):
+        super().__init__(config)
+        self.vehicle_id = self.get_json('/vehicles')['response'][0]['id']  
+        self.data = dict()
 
-    charge = data['response']['charge_state']
+    def set_charge_limit(self, limit):
+        self.post_json('/vehicles/{}/command/set_charge_limit'.format(self.vehicle_id), json_data={ 'percent': limit })
 
-    battery_range = charge['battery_range']
-    est_range = charge['est_battery_range']
-    battery_level = charge['battery_level']
-    
-    print('    Battery:\n\tRange: \t\t\t{}\n\tEstimated range: \t{}\n\tBattery: \t\t{}%\n\tTheoretical max range: \t{}'.format(
-        battery_range, 
-        est_range,
-        battery_level, 
-        battery_range*100//battery_level,
-        )
-    )
+    def wake_up(self):
+        self.post_json('/vehicles/{}/wake_up'.format(self.vehicle_id))
+
+    def pull_data(self):
+        self.data=self.get_json('/vehicles/{}/data'.format(self.vehicle_id))
+        return self.data
+
+
+    def print_stats(self):
+        firmware_version = self.data['response']['vehicle_state']['car_version']
+        print('    Current firmware version: {}'.format(firmware_version))
         
-    charge_limit = charge['charge_limit_soc']
-    charge_state = charge['charging_state']
+        update = self.data['response']['vehicle_state']['software_update']
+        duration = update['expected_duration_sec']
+        status = update['status']
+        if status:
+            print('[!] Software update: {}; Expected installation duration: {}'.format(status, duration))
 
-    print('    Charge limit: {}%'.format(charge_limit))
+        charge = self.data['response']['charge_state']
 
-    if charge_state == 'Charging' or charge_state == 'Complete':
-        charge_rate = charge['charge_rate']
-    
-        wh_added = charge['charge_energy_added']
-        mi_added = charge['charge_miles_added_ideal']
+        battery_range = charge['battery_range']
+        est_range = charge['est_battery_range']
+        battery_level = charge['battery_level']
+        
+        print('    Battery:\n\tRange: \t\t\t{:0.0f} mi\n\tEstimated range: \t{:0.0f} mi\n\tBattery: \t\t{:0.0f} %\n\tTheoretical max range: \t{:0.0f} mi'.format(
+            battery_range, 
+            est_range,
+            battery_level, 
+            battery_range*100//battery_level,
+            )
+        )
+            
+        charge_limit = charge['charge_limit_soc']
+        charge_state = charge['charging_state']
 
-        current = charge['charger_actual_current']
-        voltage = charge['charger_voltage']
+        print('    Current charge limit: \t{}%'.format(charge_limit))
 
-        # todo: charge_current_request and calc charge deficit
-        # todo: compare voltage and calculate power loss in the conductor
-    
-        print('    Charge started at {} miles; current: {} Amp, voltage: {} Volts at rate of {} mph'.format(battery_range-mi_added, current, voltage, charge_rate))
-        print('    Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
+        if charge_state == 'Charging' or charge_state == 'Complete':
+            charge_rate = charge['charge_rate']
+        
+            wh_added = charge['charge_energy_added']
+            mi_added = charge['charge_miles_added_ideal']
+
+            current = charge['charger_actual_current']
+            voltage = charge['charger_voltage']
+
+            # todo: charge_current_request and calc charge deficit
+            # todo: compare voltage and calculate power loss in the conductor
+
+            time_to_full_charge = int(charge['time_to_full_charge']*60)
+        
+            print('    Charge:\n\tStarted at: \t\t{:0.0f} miles\n\tCurrent: \t\t{} Amp\n\tVoltage: \t\t{} V\n\tRate of \t\t{} mph\n\tTime to full charge: \t{} min'.format(
+                battery_range-mi_added, 
+                current, voltage, 
+                charge_rate,
+                time_to_full_charge))
+
+            print('\tEngergy added: \t\t{} kwh ({:0.0f} miles).\n\tEstimated price: \t${:0.2f} at {} per kwh'.format(wh_added, mi_added, wh_added*self.config.rate, self.config.rate))
             
         
 def main():
     config = Config()
-    tesla = Tesla(config)
 
     try:
-        vehicle_id = tesla.get_json('/vehicles')['response'][0]['id']    
-        print('\n[*] Working with vehicle_id={}'.format(vehicle_id))
+
+        tesla = Tesla(config)
+        print('\n[*] Working with vehicle_id={}\n'.format(tesla.vehicle_id))
 
         if config.wakeup:
             awake = False
             while not awake:
                 try:
-                    tesla.post_json('/vehicles/{}/wake_up'.format(vehicle_id))
+                    tesla.wake_up()
                     awake = True
                 except VehicleAsleepException:
                     print("...waking up...")
                     sleep(10)
                     
-        data = tesla.get_json('/vehicles/{}/data'.format(vehicle_id))
-        print_stats(data, config.rate)
+        data = tesla.pull_data()
+
+        tesla.print_stats()
 
         if config.limit>0:
             print('    Updating the limit: {}%->{}%'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
-            tesla.post_json('/vehicles/{}/command/set_charge_limit'.format(vehicle_id), json_data={ 'percent': config.limit })
+            tesla.set_charge_limit(config.limit)
 
         if config.dump:
-            (semver,hashcode) = data['response']['vehicle_state']['car_version'].split(' ')
+            (semver,_) = data['response']['vehicle_state']['car_version'].split(' ')
             filename = semver + '.json'
             print('    Dumping config into {}'.format(filename))
             with open(filename, 'w') as outfile:
