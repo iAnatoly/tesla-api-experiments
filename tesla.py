@@ -205,8 +205,8 @@ def print_stats(data: dict, rate):
         # todo: charge_current_request and calc charge deficit
         # todo: compare voltage and calculate power loss in the conductor
     
-        print('    Charge started at {} miles; current: {} Amp, voltage: {} Volts at rate of {} mph'.format(battery_range-mi_added, current, voltage, charge_rate))
-        print('    Engergy added: {}kwh ({} miles). That would be ${} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
+        print('    Charge started at {:0.0f} miles; current: {} Amp, voltage: {} Volts at rate of {} mph'.format(battery_range-mi_added, current, voltage, charge_rate))
+        print('    Engergy added: {} kwh ({:0.0f} miles). That would be ${:0.2f} at {} per kwh'.format(wh_added, mi_added, wh_added*rate, rate))
             
         
 def main():
@@ -235,7 +235,7 @@ def main():
             tesla.post_json('/vehicles/{}/command/set_charge_limit'.format(vehicle_id), json_data={ 'percent': config.limit })
 
         if config.dump:
-            (semver,hashcode) = data['response']['vehicle_state']['car_version'].split(' ')
+            (semver,_) = data['response']['vehicle_state']['car_version'].split(' ')
             filename = semver + '.json'
             print('    Dumping config into {}'.format(filename))
             with open(filename, 'w') as outfile:
