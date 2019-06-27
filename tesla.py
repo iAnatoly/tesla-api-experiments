@@ -30,7 +30,7 @@ class Config:
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False, help='Verbose mode (priont json responses)')
         parser.add_argument('-r', '--revoke', dest='revoke', action='store_true', default=False, help='Revoke saved token (logout) and exit')
         parser.add_argument('-w', '--wakeuip', dest='wakeup', action='store_true', default=False, help='Wake up vehicle')
-        parser.add_argument('-d', '--dont', dest='cancel_update', action='store_true', default=False, help='Cancel the software update')
+        parser.add_argument('-d', '--dump', dest='dump_json', action='store_true', default=False, help='Dump the full config into json')
         
         args = parser.parse_args()
         
@@ -38,7 +38,7 @@ class Config:
         self.debug = args.verbose
         self.revoke = args.revoke
         self.wakeup = args.wakeup
-        self.cancel_update = args.cancel_update
+        self.dump = args.dump_json
         self.rate = 0.13 # let us use PGE EV rate as baseline
 
 
@@ -234,9 +234,12 @@ def main():
             print('    Updating the limit: {}%->{}%'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
             tesla.post_json('/vehicles/{}/command/set_charge_limit'.format(vehicle_id), json_data={ 'percent': config.limit })
 
-        if config.cancel_update:
-            print('    Attempting to cancel the update')
-            tesla.post_json('/vehicles/{}/command/cancel_software_update'.format(vehicle_id), json_data={})
+        if config.dump:
+            (semver,hashcode) = data['response']['vehicle_state']['car_version'].split(' ')
+            filename = semver + '.json'
+            print('    Dumping config into {}'.format(filename))
+            with open(filename, 'w') as outfile:
+                dump(data, outfile, sort_keys=True, indent=4, separators=(',', ': '))
             
     except InvalidCredentialsException as ex:
         print("[E] Invalid credentials: {}".format(ex))
