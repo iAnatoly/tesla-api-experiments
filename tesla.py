@@ -170,6 +170,7 @@ class Tesla(TeslaBase):
         self.vehicle_id = self.get_json('/vehicles')['response'][0]['id']  
         self.data = dict()
 
+
     def set_charge_limit(self, limit):
         self.post_json('/vehicles/{}/command/set_charge_limit'.format(self.vehicle_id), json_data={ 'percent': limit })
 
@@ -231,7 +232,17 @@ class Tesla(TeslaBase):
                 time_to_full_charge))
 
             print('\tEngergy added: \t\t{} kwh ({:0.0f} miles).\n\tEstimated price: \t${:0.2f} at {} per kwh'.format(wh_added, mi_added, wh_added*self.config.rate, self.config.rate))
-            
+    
+    def dump(self, filename: str):
+        with open(filename, 'w') as outfile:
+            dump(self.data, outfile, sort_keys=True, indent=4, separators=(',', ': '))
+
+    def get_semver(self):
+        (semver,_) = self.data['response']['vehicle_state']['car_version'].split(' ')
+        return semver
+
+    def get_charge_limit(self):
+        return self.data['response']['charge_state']['charge_limit_soc']
         
 def main():
     config = Config()
@@ -256,15 +267,15 @@ def main():
         tesla.print_stats()
 
         if config.limit>0:
-            print('    Updating the limit: {}%->{}%'.format(data['response']['charge_state']['charge_limit_soc'],config.limit))
+            print('    Updating the limit: {}%->{}%'.format(tesla.get_charge_limit(), config.limit))
             tesla.set_charge_limit(config.limit)
+            tesla.pull_data()
+            print('\tVerifying new limit: {} %'.format(tesla.get_charge_limit()))
 
         if config.dump:
-            (semver,_) = data['response']['vehicle_state']['car_version'].split(' ')
-            filename = semver + '.json'
+            filename = tesla.get_semver() + '.json'
             print('    Dumping config into {}'.format(filename))
-            with open(filename, 'w') as outfile:
-                dump(data, outfile, sort_keys=True, indent=4, separators=(',', ': '))
+            tesla.dump(filename)
             
     except InvalidCredentialsException as ex:
         print("[E] Invalid credentials: {}".format(ex))
