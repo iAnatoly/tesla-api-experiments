@@ -26,11 +26,14 @@ class Config:
 
     def __init__(self):
         parser = ArgumentParser(description='Send commands to tesla.')
-        parser.add_argument('-c', '--set-charge-limit', dest='limit', type=int, default=0, help='Percentage of the battery to set the charge to')
+        parser.add_argument('-l', '--set-charge-limit', dest='limit', type=int, default=0, help='Percentage of the battery to set the charge to')
         parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', default=False, help='Verbose mode (priont json responses)')
         parser.add_argument('-r', '--revoke', dest='revoke', action='store_true', default=False, help='Revoke saved token (logout) and exit')
         parser.add_argument('-w', '--wakeuip', dest='wakeup', action='store_true', default=False, help='Wake up vehicle')
         parser.add_argument('-d', '--dump', dest='dump_json', action='store_true', default=False, help='Dump the full config into json')
+        parser.add_argument('-c', '--charge', dest='cmd_charge', type=str, default='start', help='Start or stop charge', choices=['start','stop'])
+        
+        
         
         args = parser.parse_args()
         
@@ -40,6 +43,7 @@ class Config:
         self.wakeup = args.wakeup
         self.dump = args.dump_json
         self.rate = 0.13 # let us use PGE EV rate as baseline
+        self.charge_cmd = args.cmd_charge
 
 
     def get_credentials(self):
@@ -243,6 +247,14 @@ class Tesla(TeslaBase):
 
     def get_charge_limit(self):
         return self.data['response']['charge_state']['charge_limit_soc']
+
+
+    def charge_start(self):
+        self.post_json('/vehicles/{}/command/charge_start'.format(self.vehicle_id))
+
+    def charge_stop(self):
+        self.post_json('/vehicles/{}/command/charge_start'.format(self.vehicle_id))
+
         
 def main():
     try:
@@ -269,6 +281,14 @@ def main():
             tesla.set_charge_limit(config.limit)
             tesla.pull_data()
             print('\tVerifying new limit: {} %'.format(tesla.get_charge_limit()))
+
+        if config.charge_cmd=='start':
+            print('[*] Starting charge')
+            tesla.charge_start()
+
+        if config.charge_cmd=='stop':
+            print('[*] Stopping charge')
+            tesla.charge_stop()
 
         if config.dump:
             filename = tesla.get_semver() + '.json'
