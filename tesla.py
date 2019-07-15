@@ -21,6 +21,9 @@ class VehicleAsleepException(Exception):
 class UnexpectedResponseException (Exception):
     pass
 
+class UnauthorizedException (Exception):
+    pass
+
 class Config:
     default_email = 'anatoly.ivanov@gmail.com'
 
@@ -45,7 +48,6 @@ class Config:
         self.rate = 0.13 # let us use PGE EV rate as baseline
         self.charge_cmd = args.cmd_charge
 
-
     def get_credentials(self):
         self.login = input('Enter your tesla.com login: [default={}]: '.format(Config.default_email))
         if not self.login: 
@@ -68,15 +70,32 @@ class TeslaBase:
     def __init__(self, config: Config):
         ''' authenticate and save access token'''
         self.config = config
-        self.load_token()
+        self.token = None
 
-        if config.revoke:
-            self.revoke_token()
-            exit(2)
-        
-        if not self.is_token_valid():
-            self.get_token()
-            self.save_token()
+    def logoff():
+        self.revoke_token()
+        self.delete_saved_token()
+
+    def connect(self):
+        while True:
+            try:
+                if self.token is not None:
+                    self.load_token()
+
+                if self.config.revoke:
+                    self.logoff()
+                    exit(2)
+                        
+                if not self.is_token_valid():
+                     self.get_token()
+                     self.save_token()
+
+                break
+
+            except UnauthorizedException as uex:
+                print("[!] Unauthorized. Please run again to re-login")
+                self.logoff()
+                self.get_token()
 
 
     def __del__(self):
@@ -87,6 +106,8 @@ class TeslaBase:
         if self.token:
             response = post(Tesla.oauth_revoke, data='token={}'.format(self.token))
             print('[!] Token {} revoked with status code {}.'.format(self.token[:5], response.status_code))
+            self.token=None
+            self.delete_saved_token()
 
     def is_token_valid(self):
         return self.token is not None
@@ -102,6 +123,12 @@ class TeslaBase:
     def save_token(self):
         with open(Tesla.token_file, 'w+') as f:
             dump({ 'token': self.token }, f)
+
+    def delete_saved_token(self):
+        try:
+            remove(Tesla.token_file) 
+        except:
+            pass
 
     def get_token(self):
         self.config.get_credentials()
@@ -138,6 +165,9 @@ class TeslaBase:
         if response.status_code == 408:
             raise VehicleAsleepException()
      
+        if response.status_code == 401: 
+            raise UnauthorizedException(response.reason)
+
         if response.status_code > 299: 
             raise UnexpectedResponseException('Invalid response: {} {}'.format(response.status_code, response.reason))
 
@@ -158,6 +188,9 @@ class TeslaBase:
         
         if response.status_code == 408:
             raise VehicleAsleepException()
+        
+        if response.status_code == 401: 
+            raise UnauthorizedException(response.reason)
      
         if response.status_code > 299: 
             raise Exception('Invalid response: {} {}'.format(response.status_code, response.reason))
@@ -171,8 +204,13 @@ class TeslaBase:
 class Tesla(TeslaBase):
     def __init__(self,config):
         super().__init__(config)
+        self.vehicle_id = None
+        self.data = None
+        
+
+    def connect(self):
+        super().connect()
         self.vehicle_id = self.get_json('/vehicles')['response'][0]['id']  
-        self.data = dict()
 
 
     def set_charge_limit(self, limit):
@@ -257,9 +295,12 @@ class Tesla(TeslaBase):
 
         
 def main():
+    config = Config()
+    tesla = Tesla(config)
+    
     try:
-        config = Config()
-        tesla = Tesla(config)
+        tesla.connect()
+
         print('\n[*] Working with vehicle_id={}\n'.format(tesla.vehicle_id))
 
         if config.wakeup:
@@ -303,5 +344,6 @@ def main():
         print("[E] Unexpected response: {}".format(ex))           
     except ConnectionError as err:
         print("[E] Connection error: {}".format(err))
+        
 
 main()
