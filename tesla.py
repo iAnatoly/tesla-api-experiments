@@ -34,7 +34,7 @@ class Config:
         parser.add_argument('-r', '--revoke', dest='revoke', action='store_true', default=False, help='Revoke saved token (logout) and exit')
         parser.add_argument('-w', '--wakeuip', dest='wakeup', action='store_true', default=False, help='Wake up vehicle')
         parser.add_argument('-d', '--dump', dest='dump_json', action='store_true', default=False, help='Dump the full config into json')
-        parser.add_argument('-c', '--charge', dest='cmd_charge', type=str, default='start', help='Start or stop charge', choices=['start','stop'])
+        parser.add_argument('-c', '--charge', dest='cmd_charge', type=str, default='none', help='Start or stop charge', choices=['start','stop'])
         
         
         
