@@ -218,7 +218,17 @@ class Tesla(TeslaBase):
         self.post_json('/vehicles/{}/command/set_charge_limit'.format(self.vehicle_id), json_data={ 'percent': limit })
 
     def wake_up(self):
-        self.post_json('/vehicles/{}/wake_up'.format(self.vehicle_id))
+        while True:
+            json = self.post_json('/vehicles/{}/wake_up'.format(self.vehicle_id))
+            if 'response' in json:
+                if 'state' in json['response']:
+                    state = json['response']['state']
+                    print('[*] Vehicle is {}'.format(state))
+                    if state == 'online':
+                        break
+            sleep(10)
+        
+
 
     def pull_data(self):
         self.data=self.get_json('/vehicles/{}/data'.format(self.vehicle_id))
@@ -305,14 +315,7 @@ def main():
         print('\n[*] Working with vehicle_id={}\n'.format(tesla.vehicle_id))
 
         if config.wakeup:
-            awake = False
-            while not awake:
-                try:
-                    tesla.wake_up()
-                    awake = True
-                except VehicleAsleepException:
-                    print("...waking up...")
-                    sleep(10)
+            tesla.wake_up()
                     
         tesla.pull_data()
 
