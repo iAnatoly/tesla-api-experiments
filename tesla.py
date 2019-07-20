@@ -79,7 +79,7 @@ class TeslaBase:
     def connect(self):
         while True:
             try:
-                if self.token is not None:
+                if self.token is None:
                     self.load_token()
 
                 if self.config.revoke:
@@ -96,6 +96,7 @@ class TeslaBase:
                 print("[!] Unauthorized. Please run again to re-login")
                 self.logoff()
                 self.get_token()
+                self.save_token()
 
 
     def __del__(self):
