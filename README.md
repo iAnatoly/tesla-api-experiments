@@ -1,4 +1,3 @@
-## Refereneces: 
 
 * https://tesla-api.timdorr.com/
 * https://www.teslaapi.io/vehicles/commands
@@ -28,5 +27,3 @@ optional arguments:
 - start charging at a desired time with granularity higher than 30 minutes
 - periodically dump vehicle config to track changes
 
-## Known issues:
-- You may need to rm ~/.tesla_token to force re-login

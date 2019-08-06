@@ -18,10 +18,10 @@ class InvalidCredentialsException(Exception):
 class VehicleAsleepException(Exception):
     pass
 
-class UnexpectedResponseException (Exception):
+class UnexpectedResponseException(Exception):
     pass
 
-class UnauthorizedException (Exception):
+class UnauthorizedException(Exception):
     pass
 
 class Config:
@@ -87,8 +87,8 @@ class TeslaBase:
                     exit(2)
                         
                 if not self.is_token_valid():
-                     self.get_token()
-                     self.save_token()
+                    self.get_token()
+                    self.save_token()
 
                 break
 
@@ -111,7 +111,12 @@ class TeslaBase:
             self.delete_saved_token()
 
     def is_token_valid(self):
-        return self.token is not None
+        if self.token is None: return False
+        try:
+            self.get_json('/vehicles')
+            return True
+        except:
+            return False
 
     def load_token(self):
         try:
