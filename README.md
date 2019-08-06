@@ -4,7 +4,8 @@
 * https://www.teslaapi.io/vehicles/commands
 
 ## Usage:
- 
+
+``` 
   tesla.py [-h] [-l LIMIT] [-v] [-r] [-w] [-d] [-c {start,stop}]
 
 Send commands to tesla.
@@ -19,6 +20,7 @@ optional arguments:
   -d, --dump            Dump the full config into json
   -c {start,stop}, --charge {start,stop}
                         Start or stop charge
+```
 
 ## Possible use-cases:
 - set target charge level according to a schedule
