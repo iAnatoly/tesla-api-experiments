@@ -72,7 +72,7 @@ class TeslaBase:
         self.config = config
         self.token = None
 
-    def logoff():
+    def logoff(self):
         self.revoke_token()
         self.delete_saved_token()
 
@@ -92,7 +92,7 @@ class TeslaBase:
 
                 break
 
-            except UnauthorizedException as uex:
+            except UnauthorizedException:
                 print("[!] Unauthorized. Please run again to re-login")
                 self.logoff()
                 self.get_token()
