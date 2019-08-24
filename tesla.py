@@ -175,7 +175,7 @@ class TeslaBase:
             raise UnauthorizedException(response.reason)
 
         if response.status_code > 299: 
-            raise UnexpectedResponseException('Invalid response: {} {}'.format(response.status_code, response.reason))
+            raise UnexpectedResponseException('Invalid response: {} {}]\n{}'.format(response.status_code, response.reason, response.content))
 
         json = response.json()
 
@@ -236,7 +236,7 @@ class Tesla(TeslaBase):
 
 
     def pull_data(self):
-        self.data=self.get_json('/vehicles/{}/data'.format(self.vehicle_id))
+        self.data=self.get_json('/vehicles/{}/vehicle_data'.format(self.vehicle_id))
         return self.data
 
 
