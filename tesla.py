@@ -267,6 +267,8 @@ class Tesla(TeslaBase):
         charge_limit = charge['charge_limit_soc']
         charge_state = charge['charging_state']
 
+        print('    Charge state: {}'.format(charge_state))
+
         print('    Current charge limit: \t{}%'.format(charge_limit))
 
         if charge_state == 'Charging' or charge_state == 'Complete':
