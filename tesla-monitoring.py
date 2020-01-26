@@ -4,25 +4,9 @@ import json
 from datetime import datetime
 from tesla_api import TeslaApiClient
 
-class LocationManager:
-    precision = 0.000005
+class ScheduleManager:
     def __init__(self, locations):
         self.locations = locations
-
-    def find_applicable_location(self, latitude, longitude):
-        for location in self.locations:
-            coords = location["coordinates"]
-            lat = coords["latitude"]
-            lon = coords["longitude"]
-
-            if (abs(lat-latitude) < self.precision and abs(lon-longitude) < self.precision):
-                return location 
-        return None
-
-class ScheduleManager:
-
-    def __init__(self, location):
-        self.location = location
 
     def _is_applicable(self, timeslot, now):
         (start_hour, start_min) = [ int(s) for s in timeslot["start"].split(':') ]
@@ -35,14 +19,22 @@ class ScheduleManager:
     def find_applicable_schedule(self):
         now = datetime.now()
         
-        if self.location is None:
-            return None
-
-        for timeslot in self.location["schedule"]:
-            if self._is_applicable(timeslot, now):
-                return timeslot
+        for location in self.locations:
+            for timeslot in location["schedule"]:
+                if self._is_applicable(timeslot, now):
+                    yield timeslot, location["coordinates"]
 
         return None
+    
+def find_applicable_location(pairs, latitude, longitude):
+    precision = 0.000005
+    for pair in pairs:
+        coords = pair[1]
+        lat = coords["latitude"]
+        lon = coords["longitude"]
+
+        if (abs(lat-latitude) < precision and abs(lon-longitude) < precision):
+            yield pair[0]
     
 
 async def main():
@@ -51,26 +43,50 @@ async def main():
 
     print(json.dumps(config, indent=4))
     client = TeslaApiClient(token=config["token"])
-    location_mgr = LocationManager(config["locations"])
 
     vehicles = await client.list_vehicles()
     vehicle = [ vehicle for vehicle in vehicles if vehicle.display_name == config["vehicle_name"] ][0]
     assert vehicle is not None
 
-    drive_state = await vehicle.get_drive_state()
-    print(json.dumps(drive_state, indent=4))
-    
-    location = location_mgr.find_applicable_location(drive_state["latitude"], drive_state["longitude"])
-    if location is None:
-        print("Cannot find applicable locations")
 
-    sch_mgr = ScheduleManager(location)
-    schedule = sch_mgr.find_applicable_schedule()
-    if schedule is None:
+    sch_mgr = ScheduleManager(config["locations"])
+    schedule_pairs = list(sch_mgr.find_applicable_schedule())
+    if schedule_pairs is None:
         print("Cannot find applicable schedule")
 
+    # if vehicle is offline, check if any of the schedules allow waking up. Wake up or quit
+    if vehicle.state != 'online':
+        if any(schedule[0]["wake_up"] for schedule in schedule_pairs):
+            print("One or more schedules allow vehicle to be woken up")
+            await vehicle.wake_up()
+            while True:
+                try:
+                    await vehicle.get_drive_state()
+                    break
+                except:
+                    pass
 
-    print(vehicle.state)
+        else:
+            print("Vehicle is offline, and none ogf the schedules allow wake up")
+            return
+    
+    drive_state = await vehicle.get_drive_state()
+    # print(json.dumps(drive_state, indent=4))
+
+    schedules = find_applicable_location(schedule_pairs, drive_state["latitude"], drive_state["longitude"])
+    if schedules is None:
+        print("Cannot find a schedule with applicable locations")
+
+
+    charge_state = await vehicle.charge.get_state()
+    print(json.dumps(charge_state, indent=4))
+
+    for schedule in schedules:
+        print(schedule)
+        if charge_state['charging_state'] in schedule['valid_states']:
+            print('state is ok: ',charge_state['charging_state'],' in ',schedule['valid_states'])
+        else:
+            print('invalid state: ',charge_state['charging_state'])
 
     await client.close()
 
