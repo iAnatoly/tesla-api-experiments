@@ -29,6 +29,8 @@ class AlertManager:
                 self.alerting_providers.append(TwilioAlertProvider(alert_config))
             elif alert_config["kind"] == "ConsoleAlertProvider":
                 self.alerting_providers.append(ConsoleAlertProvider(alert_config))
+            elif alert_config["kind"] == "SlackAlertProvider":
+                self.alerting_providers.append(SlackAlertProvider(alert_config))
             else:
                 print('Warning: unknown alerting provider: ', alert_config["kind"])
 
@@ -50,10 +52,10 @@ class AlertProvider:
 
 class ConsoleAlertProvider(AlertProvider):
     def info(self, message):
-        print('INFO: ', message)
+        print('{} INFO: {}'.format(datetime.now().isoformat(), message))
 
     def alert(self,message):
-        print('ALERT: ',message)
+        print('{} ALERT: {}'.format(datetime.now().isoformat(), message))
 
 class TwilioAlertProvider(AlertProvider):
     def alert(self, message):
@@ -65,6 +67,14 @@ class TwilioAlertProvider(AlertProvider):
             to=self.params["to"]
         )
 
+#TODO: implement Slack alerting provider
+class SlackAlertProvider(AlertProvider):
+    def info(self, message):
+        raise NotImplementedError()
+
+    def alert(self,message):
+        raise NotImplementedError()
+
 class ScheduleManager:
     def __init__(self, locations, alert_mgr):
         self.locations = locations
@@ -75,7 +85,6 @@ class ScheduleManager:
         (end_hour, end_min) = [ int (s) for s in timeslot["end"].split(':') ]
         start_time = now.replace(hour=start_hour, minute=start_min)
         end_time = now.replace(hour=end_hour, minute=end_min)
-
         return start_time<now and end_time>now
 
     def filter_schedules_by_timeslot(self):
@@ -87,6 +96,7 @@ class ScheduleManager:
                 if self._is_applicable(timeslot, now):
                     # enriching schedule with coordinates to flatten the data structure
                     timeslot["coordinates"] = location["coordinates"]
+                    timeslot["name"] = location["name"]
                     self.applicable_schedules.append(timeslot)
         return len(self.applicable_schedules)>0
 
@@ -113,7 +123,7 @@ class ScheduleManager:
             if state in schedule['valid_states']:
                 self.alert_mgr.info('state "{}" is valid : {}'.format(state,schedule['valid_states']))
             else:
-                self.alert_mgr.alert('Vehicle state "{}" is invalid in schedule {}-{}'.format(state,schedule["start"], schedule["end"]))
+                self.alert_mgr.alert('Vehicle state "{}" is invalid at location "{}" for schedule {}-{}'.format(state,schedule["name"],schedule["start"], schedule["end"]))
         return False
 
 async def main():
@@ -123,8 +133,6 @@ async def main():
     alert_mgr = AlertManager(config['alerting'])
 
     try:
-    
-        # print(json.dumps(config, indent=4))
         client = TeslaApiClient(token=config["token"])
 
         vehicles = await client.list_vehicles()
@@ -140,34 +148,30 @@ async def main():
         # if vehicle is offline, check if any of the schedules allow waking up. Wake up or quit
         if vehicle.state != 'online':
             if sch_mgr.can_wake_up():
-                print("One or more schedules allow vehicle to be woken up")
+                alert_mgr.info("One or more schedules allow vehicle to be woken up")
                 await vehicle.wake_up()
                 while True:
                     try:
                         time.sleep(3)
-                        await vehicle.get_drive_state()
+                        drive_state = await vehicle.get_drive_state()
                         break
                     except:
                         pass
 
             else:
                 raise VehicleOfflineException("Vehicle is offline, and none of the schedules allow wake up")
-                
+        else:                
+            drive_state = await vehicle.get_drive_state()
         
-        drive_state = await vehicle.get_drive_state()
-        # print(json.dumps(drive_state, indent=4))
-
         if not sch_mgr.filter_schedules_by_location(drive_state["latitude"], drive_state["longitude"]):
             raise NoLocationException("Vehicle is not at a known location")
 
         charge_state = await vehicle.charge.get_state()
-        # print(json.dumps(charge_state, indent=4))
-
+        
         sch_mgr.validate_state(charge_state['charging_state'])
 
     except (VehicleOfflineException,NoScheduleException,NoLocationException) as ex:
-        print(ex)
-    #except VehicleNotFoundException(Exception):
+        alert_mgr.info(ex)
     except Exception as ex:
         alert_mgr.alert(ex)
     finally:

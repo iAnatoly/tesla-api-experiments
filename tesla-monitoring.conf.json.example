@@ -9,6 +9,7 @@
     "vehicle_name": "<CENSORED>",
     "locations": [
         {
+            "name": "Home",
             "coordinates": {
                 "latitude": 10.123456,
                 "longitude": -10.123456
